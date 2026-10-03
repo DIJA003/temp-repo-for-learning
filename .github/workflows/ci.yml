@@ -1,4 +1,4 @@
-name: CI
+name: CI/CD
 
 on:
   push:
@@ -8,6 +8,10 @@ on:
 
 permissions:
   contents: read
+
+env:
+  IMAGE: ${{ vars.DOCKERHUB_USERNAME }}/hello
+  VERSION: v${{ github.run_number }}
 
 jobs:
   test:
@@ -35,16 +39,13 @@ jobs:
       - name: Lint
         run: ruff check .
 
-      - name: Test
+      - name: Unit tests
         run: pytest
 
-  docker:
+  build:
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 10
     needs: test
-    env:
-      IMAGE: ${{ vars.DOCKERHUB_USERNAME }}/hello
-      VERSION: v${{ github.run_number }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
@@ -52,18 +53,29 @@ jobs:
           persist-credentials: false
 
       - name: Build image
-        run: docker build -t $IMAGE:$VERSION -t $IMAGE:latest .
+        run: docker build -t $IMAGE:$VERSION .
 
-      - name: Smoke test
+      - name: Smoke test image
         run: docker run --rm $IMAGE:$VERSION
 
+  deploy:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    needs: build
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
       - name: Log in to Docker Hub
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: docker/login-action@v3
         with:
           username: ${{ vars.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Push image
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        run: docker push --all-tags $IMAGE
+      - name: Build and push to Docker Hub
+        run: |
+          docker build -t $IMAGE:$VERSION -t $IMAGE:latest .
+          docker push --all-tags $IMAGE
