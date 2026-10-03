@@ -17,7 +17,10 @@ jobs:
       matrix:
         python-version: ["3.11", "3.12"]
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
@@ -30,7 +33,27 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     needs: test
+    env:
+      IMAGE: ${{ vars.DOCKERHUB_USERNAME }}/hello
     steps:
-      - uses: actions/checkout@v4
-      - run: docker build -t hello:ci .
-      - run: docker run --rm hello:ci
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Build image
+        run: docker build -t $IMAGE:${{ github.sha }} -t $IMAGE:latest .
+
+      - name: Smoke test
+        run: docker run --rm $IMAGE:${{ github.sha }}
+
+      - name: Log in to Docker Hub
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Push image
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: docker push --all-tags $IMAGE
