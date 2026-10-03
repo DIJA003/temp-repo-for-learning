@@ -29,23 +29,24 @@ jobs:
       - run: ruff check .
       - run: pytest
 
-  docker:
+   docker:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     needs: test
     env:
       IMAGE: ${{ vars.DOCKERHUB_USERNAME }}/hello
+      VERSION: v${{ github.run_number }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           persist-credentials: false
 
       - name: Build image
-        run: docker build -t $IMAGE:${{ github.sha }} -t $IMAGE:latest .
+        run: docker build -t $IMAGE:$VERSION -t $IMAGE:latest .
 
       - name: Smoke test
-        run: docker run --rm $IMAGE:${{ github.sha }}
+        run: docker run --rm $IMAGE:$VERSION
 
       - name: Log in to Docker Hub
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
